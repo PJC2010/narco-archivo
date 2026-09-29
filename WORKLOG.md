@@ -1,0 +1,12 @@
+# Verification and delivery
+- TypeScript check: passed.
+- Production Worker build: passed.
+- D1 migration inspected: creates entries table only, no seed data.
+- Portable local preview at http://127.0.0.1:5173/.
+- Local DB migration: node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_naive_human_cannonball.sql
+- Impeccable mechanical detector: no findings.
+- Local API integration checks passed: anonymous write/export denial, cross-origin denial, draft persistence and visibility, publication, uploads, private/public image access, stale-version conflicts, graph-cycle rejection, linked-deletion protection and source validation.
+- Browser checked at 1280×900 and 390×844: archive, owner sign-in, save draft, profile, hierarchy expansion and mobile overflow.
+- WebMCP search registered; valid input returned matching visible records and updated UI; invalid input was rejected.
+- Synthetic local fixtures removed after testing. Production migrations contain no entries or images.
+- Sites plugin script files became unavailable during the session after project setup. Used the retained starter build and native Sites connector with a temporary Git/packaging helper; credentials remain in process memory/stdin only.
