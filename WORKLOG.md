@@ -1,12 +1,25 @@
-# Verification and delivery
-- TypeScript check: passed.
-- Production Worker build: passed.
-- D1 migration inspected: creates entries table only, no seed data.
-- Portable local preview at http://127.0.0.1:5173/.
-- Local DB migration: node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_naive_human_cannonball.sql
-- Impeccable mechanical detector: no findings.
-- Local API integration checks passed: anonymous write/export denial, cross-origin denial, draft persistence and visibility, publication, uploads, private/public image access, stale-version conflicts, graph-cycle rejection, linked-deletion protection and source validation.
-- Browser checked at 1280×900 and 390×844: archive, owner sign-in, save draft, profile, hierarchy expansion and mobile overflow.
-- WebMCP search registered; valid input returned matching visible records and updated UI; invalid input was rejected.
-- Synthetic local fixtures removed after testing. Production migrations contain no entries or images.
-- Sites plugin script files became unavailable during the session after project setup. Used the retained starter build and native Sites connector with a temporary Git/packaging helper; credentials remain in process memory/stdin only.
+# Vercel migration — 2026-10-03
+
+- Replaced the Cloudflare/Vinext build with standard Next.js development, production build, and server commands.
+- Removed unused Sites authentication, connector scaffolding, Wrangler configuration, and D1 migrations.
+- Added server-side Supabase Auth with a confirmed owner email allowlist, secure session cookies, refresh handling, and same-origin POST sign-in/sign-out.
+- Added a PostgreSQL migration with a private archive table and service-only mutation functions. Saves and deletes serialize relationship and version checks with their writes.
+- Moved image storage to a private Supabase bucket; image responses recheck owner/publication access and disable caching. Uploads are limited to 4 MB for Vercel.
+- Preserved the archive interface, draft/publication validation, relationships, optimistic save conflicts, and JSON export.
+- Added environment templates and Vercel/Supabase setup instructions in DEPLOYMENT.md.
+
+## Verification
+
+- `npm run build`: passed with no Supabase credentials; standard Next.js output includes all API, authentication, and workspace routes.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm test`: passed against the final production build on 127.0.0.1.
+- Verified public/login page rendering, password sign-in, confirmed-owner checks, spoofed-header rejection, same-origin enforcement, session expiry and refresh-cookie propagation, revoked sessions, and logout during an Auth outage.
+- Verified actual SQL grants and mutations, private drafts, publishing/unpublishing, private/public image access, invalid/oversized uploads, conflicting saves, cycle/missing-parent rejection, linked deletion protection, soft deletion, and exports beyond 1,000 entries.
+- `git diff --check`: passed.
+
+Integration tests use the actual PostgreSQL migration with PGlite and a local Supabase-compatible HTTP service. Auth and object storage are test doubles; these checks do not establish live Supabase/Vercel deployment readiness.
+
+## External setup
+
+No Supabase or Vercel project credentials were provided in this workspace. Deployment requires applying the SQL migration, provisioning the owner, and setting the documented environment variables. Existing Cloudflare records/images are not automatically transferred.

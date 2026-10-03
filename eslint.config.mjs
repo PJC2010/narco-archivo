@@ -10,14 +10,22 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
-    "build/**",
+    "dist/**",
     "next-env.d.ts",
   ]),
+  {
+    files: ["components/{archive,editor,profile,tree}.tsx"],
+    rules: {
+      // Fetch private images directly so each request rechecks publication and
+      // owner access; an image optimizer must not cache formerly public content.
+      "@next/next/no-img-element": "off",
+    },
+  },
   {
     files: ["components/ui/**/*.{ts,tsx}", "hooks/use-mobile.ts"],
     rules: {
       // These files are vendored verbatim from shadcn@4.17.0. Keep the
-      // registry source intact while applying the stricter rules to Site code.
+      // registry source intact while applying the stricter rules to application code.
       "@typescript-eslint/no-unused-vars": "off",
       "react-hooks/purity": "off",
       "react-hooks/set-state-in-effect": "off",

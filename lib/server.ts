@@ -1,10 +1,69 @@
-import { env } from 'cloudflare:workers';
-import { getChatGPTUser } from '@/app/chatgpt-auth';
-import { Entry } from './model';
-export function db(){if(!env.DB)throw new Error('Database unavailable');return env.DB}
-export function bucket(){if(!env.BUCKET)throw new Error('Image storage unavailable');return env.BUCKET}
-export async function isOwner(){const user=await getChatGPTUser();const owner=(env as Cloudflare.Env & {OWNER_EMAIL?:string}).OWNER_EMAIL||process.env.OWNER_EMAIL;return !!(owner&&user&&user.email.toLowerCase()===owner.toLowerCase());}
-export async function entries(owner=false):Promise<Entry[]>{const result=await db().prepare(owner?'SELECT payload FROM entries WHERE deleted = 0 ORDER BY updated_at DESC':"SELECT payload FROM entries WHERE deleted = 0 AND status = 'Published' ORDER BY updated_at DESC").all<{payload:string}>();const rows=result.results.map(r=>JSON.parse(r.payload) as Entry);if(owner)return rows;const visible=new Set(rows.map(r=>r.id));return rows.map(r=>({...r,relations:r.relations.filter(rel=>visible.has(rel.parentId))}));}
-export async function authorizeWrite(request:Request){if(!await isOwner())return Response.json({error:'Only the archive owner can make changes. Sign in with the owner account.'},{status:403});const origin=request.headers.get('origin');if(!origin||origin!==new URL(request.url).origin)return Response.json({error:'This request must come from the archive.'},{status:403});return null;}
-export function failure(error:unknown){console.error('Archive request failed',error);return Response.json({error:'The archive could not be reached. Your changes are still in the editor. Please try again.'},{status:503,headers:{'Cache-Control':'no-store'}})}
-export function graphError(current:Entry,all:Entry[]){const graph=new Map(all.filter(e=>e.id!==current.id).map(e=>[e.id,e.relations.map(r=>r.parentId)]));graph.set(current.id,current.relations.map(r=>r.parentId));for(const r of current.relations){if(!graph.has(r.parentId))return 'A linked entry no longer exists. Remove or replace that relationship.';}const visit=(id:string,path:Set<string>):boolean=>{if(path.has(id))return true;const next=new Set(path).add(id);return(graph.get(id)||[]).some(p=>visit(p,next))};return visit(current.id,new Set())?'This relationship would create a circular hierarchy. Choose another parent.':null;}
+import 'server-only';
+
+import { isOwner } from '@/lib/auth';
+import { isSameOriginRequest } from '@/lib/request-security';
+import { getSupabaseAdmin } from '@/lib/supabase/admin';
+import type { Entry } from './model';
+
+export { isOwner } from '@/lib/auth';
+
+export function db() {
+  return getSupabaseAdmin();
+}
+
+export function bucket() {
+  const name = process.env.SUPABASE_STORAGE_BUCKET?.trim() || 'archive-images';
+  return db().storage.from(name);
+}
+
+export async function entries(owner = false): Promise<Entry[]> {
+  const rows: Entry[] = [];
+  const pageSize = 1000;
+
+  // PostgREST caps each response; page through the archive so exports are complete.
+  for (let offset = 0; ; offset += pageSize) {
+    let query = db()
+      .from('entries')
+      .select('payload')
+      .eq('deleted', false)
+      .order('updated_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (!owner) query = query.eq('status', 'Published');
+    const { data, error } = await query;
+    if (error) throw error;
+    rows.push(...(data || []).map(row => row.payload as Entry));
+    if (!data || data.length < pageSize) break;
+  }
+
+  if (owner) return rows;
+  const visible = new Set(rows.map(row => row.id));
+  return rows.map(row => ({
+    ...row,
+    relations: row.relations.filter(relation => visible.has(relation.parentId)),
+  }));
+}
+
+export async function authorizeWrite(request: Request) {
+  if (!await isOwner()) {
+    return Response.json(
+      { error: 'Only the archive owner can make changes. Sign in with the owner account.' },
+      { status: 403, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+  if (!isSameOriginRequest(request)) {
+    return Response.json(
+      { error: 'This request must come from the archive.' },
+      { status: 403, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+  return null;
+}
+
+export function failure(error: unknown) {
+  console.error('Archive request failed', error);
+  return Response.json(
+    { error: 'The archive could not be reached. Your changes are still in the editor. Please try again.' },
+    { status: 503, headers: { 'Cache-Control': 'no-store' } },
+  );
+}
